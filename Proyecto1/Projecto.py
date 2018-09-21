@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+import operator as op
+
 def sigmoid(net): # função sigmoide
     return (1/(1+np.exp(-net)))
 
@@ -90,6 +92,7 @@ def backpropagation(model,X,Y,eta = 0.1,momentum = 0.2 ,threshold = 1e-7, dnet =
             
             deltaH[0] = (np.dot(delta,Wk))
             dE2_dw_h[0] = deltaH[0].reshape((deltaH[0].shape[0],1)) * (np.dot(-2*dnet(results[1][0]).reshape((results[1][0].shape[0],1)),Xp))
+            Vhidden[0] =momentum*Vhidden[0] + dE2_dw_h[0]
             #atualização dos pesos
         
             model[4] =  model[4] -  eta*Voutput            
@@ -167,7 +170,7 @@ def sub_sampler(data_samples, ratio, verbose=False):
     
     return [sub_sample_ids_train,sub_sample_ids_test]
 
-def wine_test(Data,siz = 0.7,maxiter = 100, eta = 0.1):
+def wine_test(Data,siz = 0.7,maxiter = 100, eta = 0.7,momentum = 0):
  
     length = Data.shape[1]
     X = Data[:,1:length]
@@ -184,29 +187,28 @@ def wine_test(Data,siz = 0.7,maxiter = 100, eta = 0.1):
     X2 = X[sizes[1],:]
     Y2 = Y[sizes[1],:]
     
-    M = mlp(Isize = 13, Hsize = [4,2], Osize = 3)
-    trained = backpropagation(M,X1,Y1,eta = eta , maxiter = maxiter)
+    M = mlp(Isize = 13, Hsize = [2], Osize = 3)
+    trained = backpropagation(M,X1,Y1,eta = eta , momentum = momentum , maxiter = maxiter)
     
+    A = clasificacion(trained,X1,Y1)
+    B = clasificacion(trained,X2,Y2)
     
-    
-    print("Particionamiento: "+ str(siz) +" Max.Iter: " + str(maxiter) + " Eta: " + str(eta))    
-    print("Error na data de treinamento",clasificacion(trained,X1,Y1))
-    print("Error na data de test",clasificacion(trained,X2,Y2))
+    print("Particionamiento: "+ str(siz) +" Max.Iter: " + str(maxiter) + " Eta: " + str(eta) +  "Momentum:" + str(momentum))    
+    print("Error na data de treinamento",A)
+    print("Error na data de test",B)
     print("\n")
             
-    return
+    return [A,B]
 
-def music_test(Data,siz = 0.7, maxiter = 100,eta = 0.55):
+def music_test(Data,siz = 0.7, maxiter = 30,eta = 0.55,momentum = 0):
     
-    Datas = Data.copy()
     Data = normalizacion(Data)
     
     length = Data.shape[1]
  
     X = Data[:,0:length-2]
     Y = Data[:,length-2:length]
-    Y3 = Datas[:,length-2:length]
-   
+
     sizes = sub_sampler(X, siz)
     
     X1 = X[sizes[0],:]
@@ -216,29 +218,29 @@ def music_test(Data,siz = 0.7, maxiter = 100,eta = 0.55):
     Y2 = Y[sizes[1],:]
    
     M = mlp(Isize = 68, Hsize = [2], Osize = 2)
-    trained = backpropagation(M,X1,Y1,eta = eta , maxiter = maxiter)
+    trained = backpropagation(M,X1,Y1,eta = eta , momentum = momentum , maxiter = maxiter)
+    
+    
+    A= regresion(trained,X1,Y1)
+    B= regresion(trained,X2,Y2)
     
     print("Particionamiento: "+ str(siz) +" Max.Iter: " + str(maxiter) + " Eta: " + str(eta))    
-    print("Error na data de treinamento",regresion(trained,X1,Y1,Y3))
-    print("Error na data de test",regresion(trained,X2,Y2,Y3))
+    print("Error na data de treinamento",A)
+    print("Error na data de test",B)
     print("\n")
     
     
-    return 
+    return [A,B]
 
 def main():
     
-   datos = pd.read_csv("wine.data",sep = ",") # leitura dos dados
-   Data = datos.values
-    
-   Iter = [40,70,100,140]
-   E = [ 0.1,0.4,0.7,0.9]
-   T = [ 0.65,0.7,0.75]
-
-   for i in np.arange(3):
-        for j in np.arange(4):
-            for k in np.arange(4):
-                wine_test(Data,siz=T[i], maxiter = Iter[j], eta = E[k])
-    
+   datos = pd.read_csv("default_features_1059_tracks.data",sep = ",") # leitura dos dados
+   MusicData = datos.values
+   music_test(MusicData)
+   
+   datos2 = pd.read_csv("wine.data",sep = ",")
+   WineData = datos2.values
+   wine_test(WineData)
+   
 if __name__ == "__main__":
     main()
