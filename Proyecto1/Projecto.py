@@ -2,8 +2,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-import operator as op
-
 def sigmoid(net): # função sigmoide
     return (1/(1+np.exp(-net)))
 
@@ -29,7 +27,7 @@ def feedforward(X,model,function = sigmoid):
     
     return [fnetO,fnetH]
 
-def backpropagation(model,X,Y,eta = 0.1,momentum = 1 ,threshold = 1e-7, dnet = derivadanet,maxiter = 80):
+def backpropagation(model,X,Y,eta = 0.1,momentum = 0.2 ,threshold = 1e-7, dnet = derivadanet,maxiter = 80):
     sError = 2*threshold
     c = 0
     while sError > threshold and c < maxiter: # criterio de parada
@@ -59,11 +57,13 @@ def backpropagation(model,X,Y,eta = 0.1,momentum = 1 ,threshold = 1e-7, dnet = d
             
             deltaO = Error * dnet(results[0])
             dE2_dw_O = np.dot((-2*deltaO.reshape((deltaO.shape[0],1))),np.transpose(Hp)) 
-            
+            Voutput = np.zeros(dE2_dw_O.shape)
+            Voutput = momentum*Voutput + dE2_dw_O
             #Treinamento capa intermedia
         
             deltaH = []
             dE2_dw_h = []
+            Vhidden = []
             
             delta = deltaO
             Wk = model[4][:,0:model[1][h-1]]
@@ -71,12 +71,16 @@ def backpropagation(model,X,Y,eta = 0.1,momentum = 1 ,threshold = 1e-7, dnet = d
             for i in range(h):
                 deltaH.append(0)
                 dE2_dw_h.append(0)
+                Vhidden.append(0)
             
             for h in range(len(model[1])-1,0,-1):
                 Xp = np.concatenate((results[1][h-1],np.ones(1)),axis = 0 )
                 Xp = np.reshape(Xp,(1,model[1][h-1]+1))
+                
                 deltaH[h] = np.dot(delta,Wk) 
                 dE2_dw_h[h] = deltaH[h].reshape((deltaH[h].shape[0],1)) * (np.dot(-2*dnet(results[1][h]).reshape((results[1][h].shape[0],1)),Xp))
+                Vhidden[h] = momentum*Vhidden[h] + dE2_dw_h[h]
+                
                 
                 delta = deltaH[h]
                 Wk = model[3][h][:,0:model[1][h-1]]
@@ -88,10 +92,9 @@ def backpropagation(model,X,Y,eta = 0.1,momentum = 1 ,threshold = 1e-7, dnet = d
             dE2_dw_h[0] = deltaH[0].reshape((deltaH[0].shape[0],1)) * (np.dot(-2*dnet(results[1][0]).reshape((results[1][0].shape[0],1)),Xp))
             #atualização dos pesos
         
-            model[4] =  model[4] -  eta*dE2_dw_O
-            
+            model[4] =  model[4] -  eta*Voutput            
             for i in range(len(model[1])):
-                model[3][i] =  model[3][i] -  eta*dE2_dw_h[i] 
+                model[3][i] =  model[3][i] -  eta*Vhidden[i] 
         
         #contador
         
@@ -110,13 +113,15 @@ def mlp(Isize = 10,Hsize = [2,4] ,Osize = 3):
     # Hsize tamano de camada oculta
 
     Whidden = []
+    Vmomentum = []
     previous_length = Isize    
     for i in range (len(Hsize)):
         Whidden.append(np.random.random_sample((Hsize[i],previous_length +1)) - 0.5 )
+        Vmomentum.append(np.zeros((Hsize[i],previous_length +1)));
         previous_length = Hsize[i]    
 
     Woutput = np.random.random_sample((Osize,previous_length +1)) - 0.5     
-    model = [Isize,Hsize,Osize,Whidden,Woutput]
+    model = [Isize,Hsize,Osize,Whidden,Woutput,Vmomentum]
     
     return model
 
@@ -132,14 +137,6 @@ def binarizar(Y,siz = 3):
         Y2[i,int(Y[i])-1] = 1
         
     return Y2
-
-def HoldOut(Data,siz = 0.7):
-    tam = Data.shape[0] 
-    indTr = np.random.choice(np.arange(tam),int(tam*0.7), replace=False) # 70% data
-    Treinamento  = Data[indTr]
-    indTe = np.setdiff1d(np.arange(Data.shape[0]),Treinamento) # complemnto do 70%
-    Test = Data[indTe]
-    return [Treinamento,Test]
 
 def clasificacion(model,X,Y):
     acierto = 0;
@@ -187,7 +184,7 @@ def wine_test(Data,siz = 0.7,maxiter = 100, eta = 0.1):
     X2 = X[sizes[1],:]
     Y2 = Y[sizes[1],:]
     
-    M = mlp(Isize = 13, Hsize = [2,2,2], Osize = 3)
+    M = mlp(Isize = 13, Hsize = [4,2], Osize = 3)
     trained = backpropagation(M,X1,Y1,eta = eta , maxiter = maxiter)
     
     
@@ -199,9 +196,38 @@ def wine_test(Data,siz = 0.7,maxiter = 100, eta = 0.1):
             
     return
 
+def music_test(Data,siz = 0.7, maxiter = 100,eta = 0.55):
+    
+    Datas = Data.copy()
+    Data = normalizacion(Data)
+    
+    length = Data.shape[1]
+ 
+    X = Data[:,0:length-2]
+    Y = Data[:,length-2:length]
+    Y3 = Datas[:,length-2:length]
+   
+    sizes = sub_sampler(X, siz)
+    
+    X1 = X[sizes[0],:]
+    Y1 = Y[sizes[0],:]
+    
+    X2 = X[sizes[1],:]
+    Y2 = Y[sizes[1],:]
+   
+    M = mlp(Isize = 68, Hsize = [2], Osize = 2)
+    trained = backpropagation(M,X1,Y1,eta = eta , maxiter = maxiter)
+    
+    print("Particionamiento: "+ str(siz) +" Max.Iter: " + str(maxiter) + " Eta: " + str(eta))    
+    print("Error na data de treinamento",regresion(trained,X1,Y1,Y3))
+    print("Error na data de test",regresion(trained,X2,Y2,Y3))
+    print("\n")
+    
+    
+    return 
+
 def main():
     
-
    datos = pd.read_csv("wine.data",sep = ",") # leitura dos dados
    Data = datos.values
     
